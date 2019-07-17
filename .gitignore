@@ -1,0 +1,12 @@
+*.class
+*.log
+**/target/
+*.iml
+.idea/
+*.iws
+build/
+.DS_Store
+out/
+**/core-site.xml
+**/scm-source.json
+**/*.sc
