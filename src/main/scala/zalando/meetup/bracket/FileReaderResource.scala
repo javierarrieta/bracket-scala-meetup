@@ -8,7 +8,7 @@ import scala.jdk.CollectionConverters._
 
 class FileReaderResource {
 
-  val resourceFileParser: alternatives.FileParser = { file =>
+  val resourceFileParser: FileParser.FileParser = { file =>
     val ioText = for {
       reader <- Resource.fromAutoCloseable(IO(new FileReader(file)))
       buffered <- Resource.fromAutoCloseable(IO(new BufferedReader(reader)))

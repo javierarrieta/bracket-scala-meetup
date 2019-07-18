@@ -1,12 +1,15 @@
 package zalando.meetup.bracket
 
-import java.io.{BufferedReader, File, FileReader}
+import java.io.{BufferedReader, File, FileInputStream, FileReader}
 
+import cats.effect.{IO, Resource}
+
+import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
-object alternatives {
+object FileParser {
 
   type FileParser = File => Either[Throwable, String]
 
@@ -35,4 +38,17 @@ object alternatives {
     tryText.toEither
   }
 
+  val withSource: File => Either[Throwable, String] = {file =>
+    Try(Source.fromInputStream(new FileInputStream(file)).getLines().mkString("\n")).toEither
+  }
+
+  val resourceFileParser: FileParser.FileParser = { file =>
+    val ioText = for {
+      reader <- Resource.fromAutoCloseable(IO(new FileReader(file)))
+      buffered <- Resource.fromAutoCloseable(IO(new BufferedReader(reader)))
+      text <- Resource.liftF(IO(buffered.lines().iterator().asScala.mkString("\n")))
+    } yield text
+
+    ioText.use(IO.pure).attempt.unsafeRunSync()
+  }
 }
