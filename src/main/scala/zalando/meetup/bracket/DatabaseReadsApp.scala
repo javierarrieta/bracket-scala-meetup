@@ -1,9 +1,8 @@
 package zalando.meetup.bracket
 
-import java.sql.{Connection, PreparedStatement}
+import java.sql.{Connection, PreparedStatement, ResultSet}
 
 import cats.effect.{Resource, Sync}
-import cats.syntax.applicativeError._
 import cats.syntax.apply._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
@@ -38,7 +37,7 @@ object DatabaseReadsApp extends CatsApp {
       ds <- dbResource
       _ <- BlazeServerBuilder[Task].bindHttp(8080, "localhost").withHttpApp(Router("/" -> httpOperations.httpServer(ds, findCustomer[Task])).orNotFound).resource
     } yield ()
-    program.use(_ => Task.succeed(0)).catchAll(e => putStrLn(s"Error: ${e.getMessage}") *> Task.succeed(1))
+    program.use(_ => Task.never).catchAll(e => putStrLn(s"Error: ${e.getMessage}") *> Task.succeed(1))
   }
 }
 
@@ -57,14 +56,15 @@ object DatabaseOperations {
   def createDataSource[F[_] : Sync](conf: DatabaseConfig): Resource[F, HikariDataSource] =
     Resource.fromAutoCloseable(createDSConfig[F](conf).map(new HikariDataSource(_)))
 
-  def findCustomer[F[_] : Sync]: Connection => Long => Resource[F, Option[String]] = { connection =>
-    id =>
-      for {
-        stmt <- Resource.fromAutoCloseable[F, PreparedStatement](Sync[F].delay(connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?")))
-        rs <- Resource.fromAutoCloseable(Sync[F].delay(stmt.setLong(1, id)) *> Sync[F].delay(stmt.executeQuery()))
-        name <- Resource.liftF(Sync[F].delay(rs.getString(1)).map(Option.apply).recover { case _: IllegalArgumentException => None })
-      } yield name
+  def findCustomer[F[_] : Sync]: Connection => Long => Resource[F, Option[String]] = { connection => id =>
+    for {
+      stmt <- Resource.fromAutoCloseable[F, PreparedStatement](Sync[F].delay(connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?")))
+      rs <- Resource.fromAutoCloseable(Sync[F].delay(stmt.setLong(1, id)) *> Sync[F].delay(stmt.executeQuery()))
+      name <- Resource.liftF(Sync[F].delay(rsToOption(rs)))
+    } yield name
   }
+
+  def rsToOption(rs: ResultSet): Option[String] = Option(rs.next()).filter(identity).map(_ => rs.getString(1))
 
   private def createDSConfig[F[_] : Sync](dBConf: DatabaseConfig) = Sync[F].delay {
     val dataSourceConfig = new HikariConfig()
@@ -94,6 +94,6 @@ class HttpOperations[F[_] : Sync] {
     val customerNameR = Resource.fromAutoCloseable(Sync[F].delay(ds.getConnection)).map(customerFn)
     val customerF: Long => F[Option[String]] = { id => customerNameR.flatMap(_.apply(id)).use(Sync[F].delay(_)) }
 
-    HttpRoutes.of[F] { case GET -> Root / "customer" / LongVar(id) => customerF(id).flatMap(_.fold(NotFound("Customer not found"))(s => Ok(s))) }
+    HttpRoutes.of[F] { case GET -> Root / "customers" / LongVar(id) => customerF(id).flatMap(_.fold(NotFound("Customer not found"))(s => Ok(s))) }
   }
 }
