@@ -12,6 +12,7 @@ import zio.{Task, ZIO}
 object DatabaseReadsApp extends CatsApp {
 
   import DatabaseOperations._
+  import HttpOperations.httpServer
   import zio.interop.catz.implicits._
   import pureconfig.generic.auto._
 
@@ -19,12 +20,11 @@ object DatabaseReadsApp extends CatsApp {
     Resource.make[Task, Unit](Task(println("Starting application")))(_ => Task(println("Resources released, shutting down app")))
 
   override def run(args: List[String]): ZIO[DatabaseReadsApp.Environment, Nothing, Int] = {
-    val httpOperations = new HttpOperations[Task]
     val program: Resource[Task, Unit] = for {
       _ <- appLifecycleLogger
       dbConfig <- Resource.liftF(Task.fromTry(pureconfig.loadConfig[DatabaseConfig].left.map(ConfigReaderException.apply).toTry))
       ds <- createDataSource[Task](dbConfig)
-      _ <- BlazeServerBuilder[Task].bindHttp(8080, "localhost").withHttpApp(Router("/" -> httpOperations.httpServer(ds, findCustomer[Task])).orNotFound).resource
+      _ <- BlazeServerBuilder[Task].bindHttp(8080, "localhost").withHttpApp(Router("/" -> httpServer(ds, findCustomer[Task])).orNotFound).resource
     } yield ()
     program.use(_ => Task.never).catchAll(e => putStrLn(s"Error: ${e.getMessage}") *> Task.succeed(1))
   }
