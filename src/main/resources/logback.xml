@@ -1,0 +1,35 @@
+<configuration>
+    <property name="defaultPattern" value="%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n" />
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <encoder>
+            <pattern>${defaultPattern}</pattern>
+        </encoder>
+    </appender>
+<!-- this is to be enabled once k8s logging directly to s3 is enabled
+  <appender name="AUDIT" class="ch.qos.logback.core.FileAppender">
+        <file>audit.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>${defaultPattern}</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="akka.actor.ActorSystemImpl"  additivity="false">
+        <appender-ref ref="AUDIT"/>
+    </logger>
+-->
+
+    <logger name="org.zalando.akkatokens.actor.TokenLifecycleManager" level="WARN" />
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

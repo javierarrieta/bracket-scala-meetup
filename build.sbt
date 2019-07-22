@@ -11,9 +11,11 @@ libraryDependencies ++= Seq(
   "org.http4s" %% "http4s-core" % "0.21.0-M2",
   "org.http4s" %% "http4s-dsl" % "0.21.0-M2",
   "org.http4s" %% "http4s-blaze-server" % "0.21.0-M2",
+  "com.github.pureconfig" %% "pureconfig" % "0.11.1",
   "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.1",
   "org.postgresql" % "postgresql" % "42.2.6",
   "com.zaxxer" % "HikariCP" % "3.3.1",
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
 )
 
 scalacOptions ++= Seq(

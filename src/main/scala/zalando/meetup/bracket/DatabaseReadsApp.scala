@@ -13,6 +13,7 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
+import pureconfig.error.ConfigReaderException
 import zio.console.putStrLn
 import zio.interop.catz._
 import zio.{Task, ZIO}
@@ -23,10 +24,8 @@ object DatabaseReadsApp extends CatsApp {
 
   import DatabaseOperations._
   import zio.interop.catz.implicits._
+  import pureconfig.generic.auto._
 
-  private val databaseConfig: DatabaseConfig = DatabaseConfig("org.postgresql.Driver", "jdbc:postgresql://localhost:5432/customers",
-    "admin", "admin", 2, 1, 1.second, 24.hours)
-  private val dbResource: Resource[Task, HikariDataSource] = createDataSource[Task](databaseConfig)
   private val appLifecycleLogger: Resource[Task, Unit] =
     Resource.make[Task, Unit](Task(println("Starting application")))(_ => Task(println("Resources released, shutting down app")))
 
@@ -34,7 +33,8 @@ object DatabaseReadsApp extends CatsApp {
     val httpOperations = new HttpOperations[Task]
     val program: Resource[Task, Unit] = for {
       _ <- appLifecycleLogger
-      ds <- dbResource
+      dbConfig <- Resource.liftF(Task.fromTry(pureconfig.loadConfig[DatabaseConfig].left.map(ConfigReaderException.apply).toTry))
+      ds <- createDataSource[Task](dbConfig)
       _ <- BlazeServerBuilder[Task].bindHttp(8080, "localhost").withHttpApp(Router("/" -> httpOperations.httpServer(ds, findCustomer[Task])).orNotFound).resource
     } yield ()
     program.use(_ => Task.never).catchAll(e => putStrLn(s"Error: ${e.getMessage}") *> Task.succeed(1))
@@ -46,8 +46,8 @@ object DatabaseOperations {
   final case class DatabaseConfig(
                                    driver: String,
                                    url: String,
-                                   user: String,
-                                   pass: String,
+                                   username: String,
+                                   password: String,
                                    maxPoolSize: Int,
                                    minIdle: Int,
                                    connectionTimeout: FiniteDuration,
@@ -70,8 +70,8 @@ object DatabaseOperations {
     val dataSourceConfig = new HikariConfig()
     dataSourceConfig.setDriverClassName(dBConf.driver)
     dataSourceConfig.setJdbcUrl(dBConf.url)
-    dataSourceConfig.setUsername(dBConf.user)
-    dataSourceConfig.setPassword(dBConf.pass)
+    dataSourceConfig.setUsername(dBConf.username)
+    dataSourceConfig.setPassword(dBConf.password)
     dataSourceConfig.setMaximumPoolSize(dBConf.maxPoolSize)
     dataSourceConfig.setMinimumIdle(dBConf.minIdle)
     dataSourceConfig.setMaxLifetime(dBConf.maxLifetime.toMillis)
