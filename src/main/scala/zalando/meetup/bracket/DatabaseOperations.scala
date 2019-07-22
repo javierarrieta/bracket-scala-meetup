@@ -25,15 +25,15 @@ object DatabaseOperations {
   def createDataSource[F[_] : Sync](conf: DatabaseConfig): Resource[F, HikariDataSource] =
     Resource.fromAutoCloseable(createDSConfig[F](conf).map(new HikariDataSource(_)))
 
-  def findCustomer[F[_] : Sync]: Connection => Long => Resource[F, Option[String]] = { connection => id =>
-    for {
+  def findCustomer[F[_] : Sync]: Connection => Long => F[Option[String]] = { connection => id =>
+    val resultSet = for {
       stmt <- Resource.fromAutoCloseable[F, PreparedStatement](Sync[F].delay(connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?")))
       rs <- Resource.fromAutoCloseable(Sync[F].delay(stmt.setLong(1, id)) *> Sync[F].delay(stmt.executeQuery()))
-      name <- Resource.liftF(Sync[F].delay(rsToOption(rs)))
-    } yield name
+    } yield rs
+    resultSet.use(rsToOption[F])
   }
 
-  def rsToOption(rs: ResultSet): Option[String] = Option(rs.next()).filter(identity).map(_ => rs.getString(1))
+  private def rsToOption[F[_]: Sync](rs: ResultSet): F[Option[String]] = Sync[F].delay(Option(rs.next()).filter(identity).map(_ => rs.getString(1)))
 
   private def createDSConfig[F[_] : Sync](dBConf: DatabaseConfig) = Sync[F].delay {
     val dataSourceConfig = new HikariConfig()

@@ -10,17 +10,12 @@ import org.http4s.dsl.Http4sDsl
 
 object HttpOperations {
 
-  def httpServer[F[_] : Sync](ds: DataSource, customerFn: Connection => Long => Resource[F, Option[String]]): HttpRoutes[F] = {
+  def httpServer[F[_] : Sync](ds: DataSource, customerFn: Connection => Long => F[Option[String]]): HttpRoutes[F] = {
     val zioDsl = Http4sDsl[F]
 
     import zioDsl._
 
-    val customerF: Long => F[Option[String]] = { id =>
-      (for {
-        conn <- Resource.fromAutoCloseable(Sync[F].delay(ds.getConnection))
-        result <- customerFn(conn)(id)
-      } yield result).use(Sync[F].pure)
-    }
+    val customerF: Long => F[Option[String]] = { id => Resource.fromAutoCloseable(Sync[F].delay(ds.getConnection)).use(c => customerFn(c)(id)) }
 
     HttpRoutes.of[F] { case GET -> Root / "customers" / LongVar(id) => customerF(id).flatMap(_.fold(NotFound("Customer not found"))(s => Ok(s))) }
   }
