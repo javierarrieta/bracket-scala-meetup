@@ -3,10 +3,9 @@ package zalando.meetup.bracket
 import java.sql.{Connection, PreparedStatement, ResultSet}
 
 import cats.effect.{Resource, Sync}
-import cats.syntax.apply._
 import cats.syntax.functor._
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
-
+import javax.sql.DataSource
 import scala.concurrent.duration.FiniteDuration
 
 
@@ -25,10 +24,20 @@ object DatabaseOperations {
   def createDataSource[F[_] : Sync](conf: DatabaseConfig): Resource[F, HikariDataSource] =
     Resource.fromAutoCloseable(createDSConfig[F](conf).map(new HikariDataSource(_)))
 
+  def connectionResource[F[_]: Sync](ds: DataSource): Resource[F, Connection] = Resource.fromAutoCloseable(Sync[F].catchNonFatal(ds.getConnection()))
+
+  private def findCustomerStmt[F[_]: Sync](connection: Connection, id: Long): F[PreparedStatement] = { 
+    Sync[F].delay { 
+      val stmt = connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?") 
+      stmt.setLong(1, id)
+      stmt
+    }
+  }
+
   def findCustomer[F[_] : Sync]: Connection => Long => F[Option[String]] = { connection => id =>
     val resultSet = for {
-      stmt <- Resource.fromAutoCloseable[F, PreparedStatement](Sync[F].delay(connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?")))
-      rs <- Resource.fromAutoCloseable(Sync[F].delay(stmt.setLong(1, id)) *> Sync[F].delay(stmt.executeQuery()))
+      stmt <- Resource.fromAutoCloseable[F, PreparedStatement](findCustomerStmt[F](connection, id))
+      rs <- Resource.fromAutoCloseable(Sync[F].delay(stmt.executeQuery()))
     } yield rs
     resultSet.use(rsToOption[F])
   }
