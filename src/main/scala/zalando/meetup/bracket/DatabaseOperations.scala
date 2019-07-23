@@ -26,17 +26,15 @@ object DatabaseOperations {
 
   def connectionResource[F[_]: Sync](ds: DataSource): Resource[F, Connection] = Resource.fromAutoCloseable(Sync[F].delay(ds.getConnection()))
 
-  private def findCustomerStmt[F[_]: Sync](connection: Connection, id: Long): F[PreparedStatement] = { 
-    Sync[F].delay { 
-      val stmt = connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?") 
-      stmt.setLong(1, id)
-      stmt
-    }
-  }
+  private def findCustomerStmt[F[_]: Sync](connection: Connection, id: Long): Resource[F, PreparedStatement] = Resource.fromAutoCloseable { 
+    Sync[F].delay(connection.prepareStatement("SELECT name from CUSTOMERS WHERE customer_id = ?"))
+  }.evalTap(stmt => Sync[F].delay(stmt.setLong(1, id)))
+  
+  
 
   def findCustomer[F[_] : Sync]: Connection => Long => F[Option[String]] = { connection => id =>
     val resultSet = for {
-      stmt <- Resource.fromAutoCloseable[F, PreparedStatement](findCustomerStmt[F](connection, id))
+      stmt <- findCustomerStmt[F](connection, id)
       rs <- Resource.fromAutoCloseable(Sync[F].delay(stmt.executeQuery()))
     } yield rs
     resultSet.use(rsToOption[F])
