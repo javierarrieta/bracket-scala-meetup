@@ -24,7 +24,7 @@ object DatabaseOperations {
   def createDataSource[F[_] : Sync](conf: DatabaseConfig): Resource[F, HikariDataSource] =
     Resource.fromAutoCloseable(createDSConfig[F](conf).map(new HikariDataSource(_)))
 
-  def connectionResource[F[_]: Sync](ds: DataSource): Resource[F, Connection] = Resource.fromAutoCloseable(Sync[F].catchNonFatal(ds.getConnection()))
+  def connectionResource[F[_]: Sync](ds: DataSource): Resource[F, Connection] = Resource.fromAutoCloseable(Sync[F].delay(ds.getConnection()))
 
   private def findCustomerStmt[F[_]: Sync](connection: Connection, id: Long): F[PreparedStatement] = { 
     Sync[F].delay { 
