@@ -9,13 +9,14 @@ import scala.jdk.CollectionConverters._
 class FileReaderResource {
 
   val resourceFileParser: FileParser.FileParser = { file =>
-    val ioText = for {
+    val ioHandle = for {
       reader <- Resource.fromAutoCloseable(IO(new FileReader(file)))
       buffered <- Resource.fromAutoCloseable(IO(new BufferedReader(reader)))
-      text <- Resource.liftF(IO(buffered.lines().iterator().asScala.mkString("\n")))
-    } yield text
+    } yield buffered
 
-    ioText.use(IO.pure).attempt.unsafeRunSync()
+    ioHandle.use(handle => 
+      IO(handle.lines().iterator().asScala.mkString("\n"))
+    ).attempt.unsafeRunSync()
   }
 
 }
