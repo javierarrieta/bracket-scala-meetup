@@ -8,6 +8,10 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
+import cats.effect.Blocker
+import java.util.concurrent.Executors
+import fs2.text
+import cats.instances.string._
 
 object FileParser {
 
@@ -27,7 +31,7 @@ object FileParser {
     }
   }
 
-  val scalaWay: File => Either[Throwable, String] = { file =>
+  val scalaWay: FileParser.FileParser = { file =>
 
     val tryText = for {
       reader <- Try(new FileReader(file))
@@ -38,17 +42,30 @@ object FileParser {
     tryText.toEither
   }
 
-  val withSource: File => Either[Throwable, String] = {file =>
+  val withSource: FileParser.FileParser = {file =>
     Try(Source.fromInputStream(new FileInputStream(file)).getLines().mkString("\n")).toEither
   }
 
   val resourceFileParser: FileParser.FileParser = { file =>
-    val ioText = for {
+    val ioHandle = for {
       reader <- Resource.fromAutoCloseable(IO(new FileReader(file)))
       buffered <- Resource.fromAutoCloseable(IO(new BufferedReader(reader)))
-      text <- Resource.liftF(IO(buffered.lines().iterator().asScala.mkString("\n")))
-    } yield text
+    } yield buffered
 
-    ioText.use(IO.pure).attempt.unsafeRunSync()
+    ioHandle.use(handle => 
+      IO(handle.lines().iterator().asScala.mkString("\n")) 
+    ).attempt.unsafeRunSync()
+  }
+
+  val fs2FileParser: FileParser.FileParser = { file =>
+    implicit val csIO = IO.contextShift(scala.concurrent.ExecutionContext.global)
+    val tp = Blocker.liftExecutorService(Executors.newSingleThreadExecutor())
+    fs2.io.readInputStream[IO](IO(new FileInputStream(file)), 512, tp, true)
+      .through(text.utf8Decode)
+      .compile
+      .foldSemigroup
+      .map(_.getOrElse(""))
+      .attempt
+      .unsafeRunSync()
   }
 }
