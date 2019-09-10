@@ -25,7 +25,7 @@ object DatabaseReadsApp extends CatsApp {
       dbConfig <- Resource.liftF(Task.fromTry(pureconfig.loadConfig[DatabaseConfig].left.map(ConfigReaderException.apply).toTry))
       ds <- createDataSource[Task](dbConfig)
       _ <- BlazeServerBuilder[Task].bindHttp(8080, "localhost")
-              .withHttpApp(Router("/" -> httpServer(ds, findCustomer[Task])).orNotFound).resource
+              .withHttpApp(Router("/" -> httpServer(findCustomer[Task](ds))).orNotFound).resource
     } yield ()
     program.use(_ => Task.never).catchAll(e => putStrLn(s"Error: ${e.getMessage}") *> Task.succeed(1))
   }

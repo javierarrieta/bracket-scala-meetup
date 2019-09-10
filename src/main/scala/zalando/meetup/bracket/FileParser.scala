@@ -31,7 +31,7 @@ object FileParser {
     }
   }
 
-  val scalaWay: FileParser.FileParser = { file =>
+  val scalaWay: File => Either[Throwable, String] = { file =>
 
     val tryText = for {
       reader <- Try(new FileReader(file))
@@ -42,19 +42,18 @@ object FileParser {
     tryText.toEither
   }
 
-  val withSource: FileParser.FileParser = {file =>
+  val withSource: FileParser.FileParser = { file =>
     Try(Source.fromInputStream(new FileInputStream(file)).getLines().mkString("\n")).toEither
   }
 
   val resourceFileParser: FileParser.FileParser = { file =>
-    val ioHandle = for {
+    val ioText = for {
       reader <- Resource.fromAutoCloseable(IO(new FileReader(file)))
       buffered <- Resource.fromAutoCloseable(IO(new BufferedReader(reader)))
-    } yield buffered
+      text <- Resource.liftF(IO(buffered.lines().iterator().asScala.mkString("\n")))
+    } yield text
 
-    ioHandle.use(handle => 
-      IO(handle.lines().iterator().asScala.mkString("\n")) 
-    ).attempt.unsafeRunSync()
+    ioText.use(IO.pure).attempt.unsafeRunSync()
   }
 
   val fs2FileParser: FileParser.FileParser = { file =>
